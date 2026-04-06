@@ -722,6 +722,11 @@
         return (bytes / (1024 * 1024)).toFixed(2) + ' MB';
       }
 
+      // テスト用API公開
+      if (location.search.includes('test')) {
+        window.__APP__ = { formatSize, convertWebpToJpeg, arrayBufferToDataUrl };
+      }
+
     })();
   </script>
 </body>
