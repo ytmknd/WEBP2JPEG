@@ -1,0 +1,442 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>WEBP→JPEG 変換アプリ</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: "Segoe UI", "Hiragino Kaku Gothic ProN", "Yu Gothic", sans-serif;
+      background: linear-gradient(135deg, #f7f9fc 0%, #eaf2ff 100%);
+      color: #1f2937;
+    }
+    .container {
+      max-width: 1100px;
+      margin: 0 auto;
+      padding: 20px;
+    }
+    .card {
+      background: rgba(255,255,255,0.97);
+      border-radius: 20px;
+      box-shadow: 0 10px 30px rgba(0,0,0,0.08);
+      padding: 20px;
+    }
+    h1 {
+      margin: 0 0 10px;
+      font-size: clamp(1.6rem, 3vw, 2.2rem);
+      text-align: center;
+    }
+    .lead {
+      text-align: center;
+      margin: 0 0 18px;
+      color: #4b5563;
+      line-height: 1.7;
+    }
+    .controls {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+      justify-content: center;
+      align-items: center;
+      margin-bottom: 18px;
+    }
+    label.select-label {
+      font-weight: 700;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      background: #f3f4f6;
+      padding: 10px 14px;
+      border-radius: 12px;
+    }
+    select {
+      border: none;
+      background: white;
+      padding: 8px 10px;
+      border-radius: 10px;
+      font-size: 1rem;
+    }
+    .drop-zone {
+      border: 3px dashed #60a5fa;
+      border-radius: 20px;
+      padding: 28px 16px;
+      text-align: center;
+      background: #f8fbff;
+      transition: 0.2s ease;
+      cursor: pointer;
+    }
+    .drop-zone.dragover {
+      background: #dbeafe;
+      border-color: #2563eb;
+      transform: scale(1.01);
+    }
+    .drop-zone p {
+      margin: 8px 0;
+      line-height: 1.7;
+    }
+    .drop-icon {
+      font-size: 2.8rem;
+    }
+    .small {
+      color: #6b7280;
+      font-size: 0.95rem;
+    }
+    input[type="file"] { display: none; }
+    .button-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      justify-content: center;
+      margin-top: 16px;
+    }
+    button {
+      border: none;
+      border-radius: 12px;
+      padding: 12px 16px;
+      font-size: 1rem;
+      font-weight: 700;
+      cursor: pointer;
+      transition: 0.2s ease;
+      box-shadow: 0 4px 10px rgba(0,0,0,0.08);
+    }
+    button:hover { transform: translateY(-1px); }
+    button.primary { background: #2563eb; color: white; }
+    button.secondary { background: #10b981; color: white; }
+    button.gray { background: #6b7280; color: white; }
+    button:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+      transform: none;
+    }
+    .status {
+      text-align: center;
+      margin-top: 14px;
+      font-weight: 700;
+      min-height: 1.5em;
+    }
+    .grid {
+      margin-top: 22px;
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+      gap: 16px;
+    }
+    .item {
+      background: white;
+      border-radius: 18px;
+      padding: 14px;
+      box-shadow: 0 8px 24px rgba(0,0,0,0.08);
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+    .thumb-wrap {
+      width: 100%;
+      aspect-ratio: 4 / 3;
+      background: #f3f4f6;
+      border-radius: 14px;
+      overflow: hidden;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .thumb-wrap img {
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+      background: #fff;
+    }
+    .filename {
+      font-weight: 700;
+      word-break: break-all;
+    }
+    .meta {
+      color: #6b7280;
+      font-size: 0.92rem;
+      line-height: 1.5;
+    }
+    .footer-note {
+      text-align: center;
+      color: #6b7280;
+      margin-top: 18px;
+      font-size: 0.92rem;
+      line-height: 1.6;
+    }
+    @media (max-width: 640px) {
+      .container { padding: 12px; }
+      .card { padding: 16px; }
+      .drop-zone { padding: 24px 12px; }
+      button { width: 100%; }
+      .button-row { flex-direction: column; }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="card">
+      <h1>WEBP → JPEG 変換アプリ</h1>
+      <p class="lead">
+        WEBP画像をドラッグするだけで、簡単にJPEGへ変換できます。<br>
+        複数ファイル対応・個別保存・まとめてZIP保存にも対応しています。<br>
+        この版はNetlify Functionsでサーバー側変換するので、端末差の影響を受けにくいです。
+      </p>
+
+      <div class="controls">
+        <label class="select-label">
+          JPEG画質
+          <select id="qualitySelect">
+            <option value="60">低画質</option>
+            <option value="85" selected>中画質</option>
+            <option value="95">高画質</option>
+          </select>
+        </label>
+      </div>
+
+      <div class="drop-zone" id="dropZone">
+        <div class="drop-icon">🖼️</div>
+        <p><strong>ここにWEBPファイルをドラッグ＆ドロップ</strong></p>
+        <p>またはクリックして選択</p>
+        <p class="small">複数のWEBP画像をまとめて変換できます</p>
+        <input type="file" id="fileInput" accept=".webp,image/webp" multiple />
+      </div>
+
+      <div class="button-row">
+        <button class="primary" id="convertBtn" disabled>JPEGに変換</button>
+        <button class="secondary" id="downloadAllBtn" disabled>まとめてZIPダウンロード</button>
+        <button class="gray" id="clearBtn" disabled>クリア</button>
+      </div>
+
+      <div class="status" id="status"></div>
+      <div class="grid" id="previewGrid"></div>
+
+      <div class="footer-note">
+        変換処理は Netlify Functions 側で行います。<br>
+        そのため、ローカル環境でWEBPを表示できなくても、変換できる場合があります。
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const dropZone = document.getElementById('dropZone');
+    const fileInput = document.getElementById('fileInput');
+    const convertBtn = document.getElementById('convertBtn');
+    const downloadAllBtn = document.getElementById('downloadAllBtn');
+    const clearBtn = document.getElementById('clearBtn');
+    const qualitySelect = document.getElementById('qualitySelect');
+    const previewGrid = document.getElementById('previewGrid');
+    const statusEl = document.getElementById('status');
+
+    let selectedFiles = [];
+    let convertedItems = [];
+
+    function setStatus(message, isError = false) {
+      statusEl.textContent = message;
+      statusEl.style.color = isError ? '#dc2626' : '#111827';
+    }
+
+    function formatSize(bytes) {
+      if (bytes < 1024) return bytes + ' B';
+      if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+      return (bytes / (1024 * 1024)).toFixed(2) + ' MB';
+    }
+
+    function baseName(name) {
+      return name.replace(/\.[^.]+$/, '');
+    }
+
+    function resetPreviews() {
+      previewGrid.innerHTML = '';
+    }
+
+    function updateButtons() {
+      convertBtn.disabled = selectedFiles.length === 0;
+      clearBtn.disabled = selectedFiles.length === 0 && convertedItems.length === 0;
+      downloadAllBtn.disabled = convertedItems.length === 0;
+    }
+
+    function clearConvertedUrls() {
+      convertedItems.forEach(item => URL.revokeObjectURL(item.url));
+      convertedItems = [];
+    }
+
+    function handleFiles(files) {
+      const webpFiles = Array.from(files).filter(file => file.name.toLowerCase().endsWith('.webp') || file.type === 'image/webp');
+      if (webpFiles.length === 0) {
+        setStatus('WEBPファイルが見つかりませんでした。', true);
+        return;
+      }
+
+      selectedFiles = webpFiles;
+      clearConvertedUrls();
+      setStatus(`${webpFiles.length}個のWEBPファイルを読み込みました。`);
+      renderSelectedPreviews();
+      updateButtons();
+    }
+
+    function renderSelectedPreviews() {
+      resetPreviews();
+      selectedFiles.forEach(file => {
+        const card = document.createElement('div');
+        card.className = 'item';
+
+        const thumbWrap = document.createElement('div');
+        thumbWrap.className = 'thumb-wrap';
+        thumbWrap.innerHTML = '<div style="padding:12px; color:#6b7280; text-align:center; line-height:1.6;">WEBP元画像<br>変換前プレビュー</div>';
+
+        const name = document.createElement('div');
+        name.className = 'filename';
+        name.textContent = file.name;
+
+        const meta = document.createElement('div');
+        meta.className = 'meta';
+        meta.innerHTML = `元ファイル<br>サイズ: ${formatSize(file.size)}`;
+
+        card.appendChild(thumbWrap);
+        card.appendChild(name);
+        card.appendChild(meta);
+        previewGrid.appendChild(card);
+      });
+    }
+
+    async function convertFiles() {
+      if (selectedFiles.length === 0) return;
+
+      convertBtn.disabled = true;
+      downloadAllBtn.disabled = true;
+      clearConvertedUrls();
+      resetPreviews();
+      setStatus('サーバーで変換中です…');
+
+      try {
+        const formData = new FormData();
+        selectedFiles.forEach(file => formData.append('files', file, file.name));
+        formData.append('quality', qualitySelect.value);
+
+        const response = await fetch('/api/convert-webp-to-jpeg', {
+          method: 'POST',
+          body: formData
+        });
+
+        const result = await response.json();
+
+        if (!response.ok) {
+          throw new Error(result.error || '変換に失敗しました。');
+        }
+
+        convertedItems = result.files.map(file => {
+          const byteCharacters = atob(file.data);
+          const byteNumbers = new Array(byteCharacters.length);
+          for (let i = 0; i < byteCharacters.length; i++) {
+            byteNumbers[i] = byteCharacters.charCodeAt(i);
+          }
+          const byteArray = new Uint8Array(byteNumbers);
+          const blob = new Blob([byteArray], { type: file.mimeType });
+          return {
+            originalName: file.originalName,
+            jpegName: file.name,
+            blob,
+            url: URL.createObjectURL(blob)
+          };
+        });
+
+        renderConvertedPreviews();
+        setStatus(`${convertedItems.length}個のファイルをJPEGに変換しました。`);
+      } catch (error) {
+        console.error(error);
+        setStatus(`変換に失敗しました。 ${error.message}`, true);
+      } finally {
+        updateButtons();
+      }
+    }
+
+    function renderConvertedPreviews() {
+      resetPreviews();
+      convertedItems.forEach(item => {
+        const card = document.createElement('div');
+        card.className = 'item';
+
+        const thumbWrap = document.createElement('div');
+        thumbWrap.className = 'thumb-wrap';
+
+        const img = document.createElement('img');
+        img.src = item.url;
+        img.alt = item.jpegName;
+        thumbWrap.appendChild(img);
+
+        const name = document.createElement('div');
+        name.className = 'filename';
+        name.textContent = item.jpegName;
+
+        const meta = document.createElement('div');
+        meta.className = 'meta';
+        meta.innerHTML = `元ファイル: ${item.originalName}<br>変換後サイズ: ${formatSize(item.blob.size)}`;
+
+        const btn = document.createElement('button');
+        btn.className = 'primary';
+        btn.textContent = 'この画像をダウンロード';
+        btn.addEventListener('click', () => downloadBlob(item.blob, item.jpegName));
+
+        card.appendChild(thumbWrap);
+        card.appendChild(name);
+        card.appendChild(meta);
+        card.appendChild(btn);
+        previewGrid.appendChild(card);
+      });
+    }
+
+    function downloadBlob(blob, filename) {
+      const link = document.createElement('a');
+      const url = URL.createObjectURL(blob);
+      link.href = url;
+      link.download = filename;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+    }
+
+    async function downloadAllAsZip() {
+      if (convertedItems.length === 0) return;
+      const zip = new JSZip();
+      convertedItems.forEach(item => zip.file(item.jpegName, item.blob));
+      const blob = await zip.generateAsync({ type: 'blob' });
+      downloadBlob(blob, 'webp_to_jpeg_images.zip');
+    }
+
+    function clearAll() {
+      selectedFiles = [];
+      clearConvertedUrls();
+      fileInput.value = '';
+      resetPreviews();
+      setStatus('');
+      updateButtons();
+    }
+
+    dropZone.addEventListener('click', () => fileInput.click());
+    fileInput.addEventListener('change', e => handleFiles(e.target.files));
+
+    ['dragenter', 'dragover'].forEach(eventName => {
+      dropZone.addEventListener(eventName, e => {
+        e.preventDefault();
+        e.stopPropagation();
+        dropZone.classList.add('dragover');
+      });
+    });
+
+    ['dragleave', 'drop'].forEach(eventName => {
+      dropZone.addEventListener(eventName, e => {
+        e.preventDefault();
+        e.stopPropagation();
+        dropZone.classList.remove('dragover');
+      });
+    });
+
+    dropZone.addEventListener('drop', e => handleFiles(e.dataTransfer.files));
+    convertBtn.addEventListener('click', convertFiles);
+    downloadAllBtn.addEventListener('click', downloadAllAsZip);
+    clearBtn.addEventListener('click', clearAll);
+  </script>
+</body>
+</html>
