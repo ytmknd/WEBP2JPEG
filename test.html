@@ -72,6 +72,51 @@
           expect(blob.size).to.be.greaterThan(0);
         });
 
+        it('WebP非対応ブラウザをシミュレートした場合でも、フォールバック(ポリフィル)経由で変換に成功すること', async () => {
+          // 最小構成の透明な1x1 WEBPのBase64文字列
+          const webpBase64 = 'UklGRiIAAABXRUJQVlA4IBYAAAAwAQCdASoBAAEADsD+JaQAA3AAAAAA';
+          const binary = atob(webpBase64);
+          const array = new Uint8Array(binary.length);
+          for (let i = 0; i < binary.length; i++) {
+            array[i] = binary.charCodeAt(i);
+          }
+          
+          const file = new appWindow.File([array.buffer], 'test_fallback.webp', { type: 'image/webp' });
+
+          // ネイティブの Image 処理をモック化してWebP読み込みを意図的に失敗させる（非対応ブラウザのシミュレート）
+          const mockImageDescriptor = Object.getOwnPropertyDescriptor(appWindow.HTMLImageElement.prototype, 'src');
+          let fallbackTriggered = false;
+          Object.defineProperty(appWindow.HTMLImageElement.prototype, 'src', {
+            set: function(val) {
+              if (typeof val === 'string' && val.startsWith('data:image/webp')) {
+                fallbackTriggered = true;
+                // 非対応ブラウザでは画像のデコードに失敗するため、非同期でエラーを発火
+                setTimeout(() => {
+                  if (typeof this.onerror === 'function') {
+                    this.onerror(new appWindow.Event('error'));
+                  }
+                }, 10);
+              } else {
+                mockImageDescriptor.set.call(this, val);
+              }
+            },
+            get: mockImageDescriptor.get
+          });
+
+          try {
+            const blob = await app.convertWebpToJpeg(file, 0.92);
+            
+            // フォールバック処理が確実に実行されたことを検証
+            expect(fallbackTriggered).to.be.true;
+            expect(blob).to.be.an.instanceOf(appWindow.Blob);
+            expect(blob.type).to.equal('image/jpeg');
+            expect(blob.size).to.be.greaterThan(0);
+          } finally {
+            // 他のテストに影響を与えないようモックを元に戻す
+            Object.defineProperty(appWindow.HTMLImageElement.prototype, 'src', mockImageDescriptor);
+          }
+        });
+
       });
 
       describe('負荷テスト', () => {
